@@ -1,0 +1,349 @@
+---
+title: "test"
+format: html
+editor: visual
+jupyter: renv_kernel
+engine: knitr
+editor_options: 
+  chunk_output_type: console
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{python}
+import cv2
+import pytesseract
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from PIL import Image
+from math import pi
+from scipy.stats import linregress
+from math import pi
+from scipy.optimize import minimize
+import time
+```
+
+```{python eval = FALSE}
+# bonnetje Jumbo (Jelmer)
+filename = "notebooks/IMG_20250203_184646.jpg"
+img1 = np.array(Image.open(filename))
+imgbw = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+plt.imshow(imgbw, cmap="gray");
+```
+
+```{python eval = TRUE}
+# bonnetje Plus (Marco)
+filename = "notebooks/IMG_0131.jpg"
+img1 = np.array(Image.open(filename))
+imgbw = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+plt.imshow(imgbw, cmap="gray");
+```
+
+```{python eval = FALSE}
+# bonnetje Jumbo (Martijn)
+filename = "notebooks/IMG_0090.jpg"
+img1 = np.array(Image.open(filename))
+imgbw = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+plt.imshow(imgbw, cmap="gray");
+```
+
+```{python}
+# blur the image
+blurred = cv2.GaussianBlur(imgbw,(101,101),0)
+plt.imshow(blurred, cmap="gray")
+plt.show()
+# compute the gradient
+sobelx = cv2.Sobel(blurred,cv2.CV_64F,1,0,ksize=1)
+sobely = cv2.Sobel(blurred,cv2.CV_64F,0,1,ksize=1)
+fig,axs = plt.subplots(1,2)
+axs[0].imshow(sobelx, cmap="gray")
+axs[1].imshow(sobely, cmap="gray")
+```
+
+```{python}
+def venergy(gradx, x1, x2, direction, alpha=.5, beta=1, max_iter = 10000, DEBUG=False):
+    #parameters:
+    # gradx: gradient in horizontal direction
+    # cpoints: x-values for the initial points to look at. first point is at the top, second at the bottom
+    # direction: indicating if we look from right to left (direction = -1) or from left to right (direction = 1)
+    # alpna: weight for the directional part
+    # beta: weight for the gradient
+    # max_iter: maximum number of iterations
+    
+    h = gradx.shape[0]
+    w = gradx.shape[1]
+    sum_x = h * (h + 1) // 2               
+    sum_x2 = h * (h + 1) * (2 * h + 1) // 6
+    denominator = h * sum_x2 - sum_x**2
+
+    x1 = float(x1)
+    x2 = float(x2)
+
+    epsilon = 1e-3
+
+    for i in range(max_iter):
+        Y = np.arange(0,gradx.shape[0],1)
+        #determine the direction of the line and assign X
+        b = x1;
+        a = (x2-x1)/Y[-1]
+        X = (a*Y+b).astype("int32")
+        grad = gradx[Y,X]
+        
+        # fit a line through the gradient and estimate the values at the two control points
+        # the external energy is -gradient at control points (=l.intercept + l.slope*y)
+        # the internal energy is forcing the line in a certain direction
+        sum_y = grad.sum()                          
+        sum_xy = (Y*grad).sum() 
+        slope = (h * sum_xy - sum_x * sum_y) / denominator
+        intercept = (sum_y * sum_x2 - sum_x * sum_xy) / denominator       
+        x1_delta = -intercept + direction*alpha
+        x2_delta = -(intercept + slope*Y[-1]) + direction*alpha        
+        # move the line
+        x1 += x1_delta
+        x2 += x2_delta
+        delta = np.abs(x1_delta) + np.abs(x2_delta)
+        if delta < epsilon:
+            break
+    if DEBUG: 
+        print(f"contour found after {i} iterations (delta = {delta})");
+    return (x1,x2)
+```
+
+```{python}
+t = time.time()
+(r1, r2) = venergy(sobelx, 3000,3000, -1, DEBUG=True)
+(l1, l2) = venergy(sobelx, 10,10, 1, max_iter = 6000, DEBUG=True)
+print(f"time elapsed: {time.time()-t}")
+m1 = (r1+l1)/2
+m2 = (r2+l2)/2
+
+angle = 180*np.arctan2(m2-m1, sobelx.shape[0])/pi
+
+def rotateback(m1, m2):
+    Cx = imgbw.shape[1]//2; Cy =imgbw.shape[0]//2;
+
+    c = np.array([Cx,Cy])
+    p1 = np.array([m1, 0])
+    p2 = np.array([m2, imgbw.shape[0]])
+
+    d = np.linalg.norm(np.cross(p2-p1, p1-c))/np.linalg.norm(p2-p1)
+    orientation = np.sign(np.cross(p1-c, p2-c))
+    return d*orientation + Cx
+```
+
+```{python}
+plt.imshow(imgbw, cmap="gray")
+plt.plot([r1,r2], [0, imgbw.shape[0]],color="red")
+plt.plot([l1,l2], [0, imgbw.shape[0]],color="red")
+plt.plot([m1, m2], [0, imgbw.shape[0]], color = "blue", alpha = .5)
+```
+
+```{python}
+Cx = imgbw.shape[1]//2; Cy =imgbw.shape[0]//2;
+w = imgbw.shape[1]; h = imgbw.shape[0];
+M = cv2.getRotationMatrix2D((Cx, Cy), -angle, 1.0)
+rotated = cv2.warpAffine(imgbw, M, (img1.shape[1], img1.shape[0]))
+cropl = rotateback(l1, l2)
+cropr = rotateback(r1, r2)
+```
+
+```{python}
+cropped = rotated[:,int(cropl):int(cropr)]
+plt.imshow(cropped, cmap="gray");
+```
+
+```{python}
+def prop_letter_resolution(image, max_letters=48):
+    #parameters:
+    # image: image
+    # max_letters: number of letters (content size) that would fit horizontally (supermarket-dependent)
+    #  48 is measured with a rule of thumb using the PLUS receipt IMG_0131.jpg.
+    
+    # Horizontal resolution
+    res = np.shape(image)[0]
+    
+    # Dots per letter
+    dpl = res / max_letters
+    return dpl
+    
+prop_letter_resolution(cropped)
+```
+
+```{python}
+def prop_sharpness(image):
+    #parameters:
+    # image: image
+    #source: https://stackoverflow.com/a/26014796
+    
+    gy, gx = np.gradient(image)
+    gnorm = np.sqrt(gx**2 + gy**2)
+    sharpness = np.average(gnorm)
+    return sharpness
+    
+prop_sharpness(cropped)
+```
+
+```{python}
+def prop_contrast_ratio(image):
+    #parameters:
+    # image: image
+    
+    L1 = np.percentile(image, 10) / 255
+    L2 = np.percentile(image, 90) / 255
+    # the 10 and 90 percentiles as a more robust (?) variant than min max
+    
+    CR = (L1 + 0.05) / (L2 + 0.05)
+    return CR
+    
+prop_contrast_ratio(cropped)
+```
+
+```{python}
+def automatic_brightness_and_contrast(image, clip_hist_percent=25):
+
+    # Calculate grayscale histogram
+    hist = cv2.calcHist([image],[0],None,[256],[0,256])
+    hist_size = len(hist)
+
+    # Calculate cumulative distribution from the histogram
+    accumulator = []
+    accumulator.append(float(hist[0]))
+    for index in range(1, hist_size):
+        accumulator.append(accumulator[index -1] + float(hist[index]))
+
+    # Locate points to clip
+    maximum = accumulator[-1]
+    clip_hist_percent *= (maximum/100.0)
+    clip_hist_percent /= 2.0
+
+    # Locate left cut
+    minimum_gray = 0
+    while accumulator[minimum_gray] < clip_hist_percent:
+        minimum_gray += 1
+
+    # Locate right cut
+    maximum_gray = hist_size -1
+    while accumulator[maximum_gray] >= (maximum - clip_hist_percent):
+        maximum_gray -= 1
+
+    # Calculate alpha and beta values
+    alpha = 255 / (maximum_gray - minimum_gray)
+    beta = -minimum_gray * alpha
+
+    '''
+    # Calculate new histogram with desired range and show histogram 
+    new_hist = cv2.calcHist([gray],[0],None,[256],[minimum_gray,maximum_gray])
+    plt.plot(hist)
+    plt.plot(new_hist)
+    plt.xlim([0,256])
+    plt.show()
+    '''
+
+    auto_result = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
+    return (auto_result, alpha, beta)
+
+adj, alpha, beta = automatic_brightness_and_contrast(cropped)
+plt.imshow(adj, cmap="gray")
+```
+
+```{python}
+text_adj = pytesseract.image_to_string(adj)
+print(text_adj)
+```
+
+```{python}
+def bag_of_words(text, to_lower_case = True):
+    lns = str.splitlines(text_adj)
+    bag = []
+    for ln in lns:
+        bag = bag + ln.split()
+    bag_unique = list(set(bag))
+    if to_lower_case:
+        bag_unique = [str.lower(x) for x in bag_unique]
+    return bag_unique
+                     
+bag = bag_of_words(text_adj)
+bag
+```
+
+```{python}
+# string distance
+# source https://www.geeksforgeeks.org/damerau-levenshtein-distance/
+# method = Damerau–Levenshtein (this method is also used in R package stringdist (Mark vd Loo))
+def optimal_string_alignment_distance(s1, s2):
+    # Create a table to store the results of subproblems
+    dp = [[0 for j in range(len(s2)+1)] for i in range(len(s1)+1)]
+     
+    # Initialize the table
+    for i in range(len(s1)+1):
+        dp[i][0] = i
+    for j in range(len(s2)+1):
+        dp[0][j] = j
+ 
+    # Populate the table using dynamic programming
+    for i in range(1, len(s1)+1):
+        for j in range(1, len(s2)+1):
+            if s1[i-1] == s2[j-1]:
+                dp[i][j] = dp[i-1][j-1]
+            else:
+                dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+ 
+    # Return the edit distance
+    return dp[len(s1)][len(s2)]
+```
+
+```{python}
+# 
+def str_dist_common_words(words_bag, words_ref):
+    #parameters:
+    # words_bag: words to check (e.g. words found on the receipt)
+    # words_ref: reference words (i.e. words to look for)
+    dm = [[ optimal_string_alignment_distance(a, b) for b in words_bag] for a in words_ref]
+
+    # max scores
+    s = [np.min(d) for d in dm]
+
+    # which
+    w = [np.argmin(d) for d in dm]
+
+
+    # matched words
+    matches = [words_bag[i] for i in w]
+
+    return (s,matches)
+```
+
+```{python}
+common = ['omschrijving','bedrag','totaal']
+str_dist_common_words(bag, common)
+```
+
+```{python}
+data_adj6 = pytesseract.image_to_data(adj, config='--psm 6')
+
+with open("data_adj6.tsv", "w") as f:
+	f.write(data_adj6)
+```
+
+```{python}
+data_adj = pytesseract.image_to_data(adj)
+
+with open("data_adj.tsv", "w") as f:
+	f.write(data_adj)
+```
+
+```{python}
+f = os.path.split(filename)[1]
+
+if not os.path.exists("output"): 
+	os.makedirs("output")
+im = Image.fromarray(adj)
+im.save(f"output/{f}")
+```
