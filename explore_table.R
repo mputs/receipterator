@@ -219,7 +219,7 @@ D_total = convert_multi(total_nums$text)
 
 if (FALSE) {
 	# dput(D$price)
-	x = c("2.25", "2.99", "2.00", "2.00", "4.585", "4.874", "9.38", "4.38",
+	x = c("2.25", "2.99", "2.00", "2.00", "4585", "4874", "9.38", "4.38",
 		  "8.58", "4.29", "2.79", "2.49", "4.98", "2.09", "2.59", "3.69"
 	)
 
@@ -230,11 +230,21 @@ if (FALSE) {
 	total = "44.80"
 
 	library(deductive)
+	library(validate)
 
 	correct_typos()
 
-	assay <- "Some Assay"
-	plot(0,xlab=eval(parse(text = paste0(gsub(' ', '~', assay),"~AC50~(mu*M)"))))
+	xint = as.integer(as.numeric(x) * 100)
+	yint = as.integer(as.numeric(y) * 100)
+	ysel = !is.na(yint)
+
+	df = as.data.frame(t(as.matrix(structure(c(xint, yint[ysel]), names = c(paste0("x", 1:length(x)), paste0("y", which(ysel)))))))
+
+	# voorbeeld Mark vd Loo
+	regel <- paste(names(iris[1:3]),collapse="+")
+	regel <- paste(regel, "==",names(iris[4]))
+	L <- list(parse(text=regel)[[1]])
+	v <- do.call(validator, L)
 
 }
 
