@@ -245,7 +245,6 @@ if (FALSE) {
 	regel <- paste(regel, "==",names(iris[4]))
 	L <- list(parse(text=regel)[[1]])
 	v <- do.call(validator, L)
-
 }
 
 
@@ -276,3 +275,72 @@ D = D_prod |>
 	left_join(D_price, by = "line_num") |>
 	left_join(D_mult, by = "line_num") |>
 	left_join(D_discount, by = "line_num")
+
+
+
+###############################################
+# editing
+###############################################
+
+library(deductive)
+library(validate)
+
+D2 = D |>
+	mutate(id = 1:n(),
+		   p_id = paste0("p", id),
+		   d_id = paste0("d", id))
+
+D3 = rbind(
+	D2 |>
+		select(price, p_id) |>
+		rename(x = price, val = p_id) |>
+		mutate(type = "price"),
+	D2 |>
+		select(discount, d_id) |>
+		filter(!is.na(discount)) |>
+		rename(x = discount, val = d_id) |>
+		mutate(type = "discount"))
+
+
+dat = structure(data.frame(t(D3$x)), names = D3$val)
+dat$y = D_total
+
+eq1 = paste0(paste(D3$val[D3$type == "price"], collapse = "+"), "-", paste(D3$val[D3$type == "discount"], collapse = "-"), " == y")
+eqk = paste0(D2$p_id, ">", D2$d_id)[!is.na(D2$discount)]
+
+eqs = c(eq1, eqk)
+
+L = lapply(eqs, function(eq) {
+	parse(text=eq)[[1]]
+})
+v <- do.call(validator, L)
+
+dat_num = dat
+dat_num[] = lapply(dat, as.numeric)
+dat_num[] = lapply(dat_num, function(x) as.integer(x * 100))
+
+dat_num
+
+dput(dat_num)
+
+reprex::reprex({
+library(deductive)
+library(validate)
+dat = structure(list(p1 = 225L, p2 = 299L, p3 = 200L, p4 = 200L, p5 = 458500L,
+					 p6 = 487400L, p7 = 938L, p8 = 438L, p9 = 858L, p10 = 429L,
+					 p11 = 279L, p12 = 249L, p13 = 498L, p14 = 209L, p15 = 259L,
+					 p16 = 369L, d1 = 25L, d5 = 188500L, d6 = 500L, d7 = 338L,
+					 d9 = 258L, d10 = 129L, d12 = 149L, d13 = 298L, d14 = 109L,
+					 d15 = 159L, y = 4480L), row.names = 1L, class = "data.frame")
+eqs = c("p1+p2+p3+p4+p5+p6+p7+p8+p9+p10+p11+p12+p13+p14+p15+p16-d1-d5-d6-d7-d9-d10-d12-d13-d14-d15 == y",
+  "p1>d1", "p5>d5", "p6>d6", "p7>d7", "p9>d9", "p10>d10", "p12>d12",
+  "p13>d13", "p14>d14", "p15>d15")
+
+L = lapply(eqs, function(eq) {
+	parse(text=eq)[[1]]
+})
+v <- do.call(validator, L)
+
+res = correct_typos(dat, v)
+identical(res, dat)
+})
