@@ -1,6 +1,5 @@
 library(tidyverse)
 
-dat = read_tsv("data_adj.tsv")
 dat6 = read_tsv("data_adj6.tsv", quote = "")
 
 
@@ -302,6 +301,8 @@ D3 = rbind(
 		mutate(type = "discount"))
 
 
+
+
 dat = structure(data.frame(t(D3$x)), names = D3$val)
 dat$y = D_total
 
@@ -341,6 +342,6 @@ L = lapply(eqs, function(eq) {
 })
 v <- do.call(validator, L)
 
-res = correct_typos(dat, v)
+res = correct_typos(dat, v, eps = 1e-3, maxdist = "a")
 identical(res, dat)
 })

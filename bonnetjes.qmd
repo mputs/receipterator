@@ -48,24 +48,14 @@ plt.imshow(imgbw, cmap="gray");
 
 ```{python eval = FALSE}
 # bonnetje Jumbo (Martijn)
-filename = "notebooks/IMG_0090.jpg"
+# verkreukeld:
+# filename = "notebooks/IMG_0090.jpg"
+filename = "notebooks/IMG_0328.jpg"
 img1 = np.array(Image.open(filename))
 imgbw = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
 plt.imshow(imgbw, cmap="gray");
 ```
 
-```{python}
-# blur the image
-blurred = cv2.GaussianBlur(imgbw,(101,101),0)
-plt.imshow(blurred, cmap="gray")
-plt.show()
-# compute the gradient
-sobelx = cv2.Sobel(blurred,cv2.CV_64F,1,0,ksize=1)
-sobely = cv2.Sobel(blurred,cv2.CV_64F,0,1,ksize=1)
-fig,axs = plt.subplots(1,2)
-axs[0].imshow(sobelx, cmap="gray")
-axs[1].imshow(sobely, cmap="gray")
-```
 
 ```{python}
 def venergy(gradx, x1, x2, direction, alpha=.5, beta=1, max_iter = 10000, DEBUG=False):
@@ -117,46 +107,90 @@ def venergy(gradx, x1, x2, direction, alpha=.5, beta=1, max_iter = 10000, DEBUG=
 ```
 
 ```{python}
-t = time.time()
-(r1, r2) = venergy(sobelx, 3000,3000, -1, DEBUG=True)
-(l1, l2) = venergy(sobelx, 10,10, 1, max_iter = 6000, DEBUG=True)
-print(f"time elapsed: {time.time()-t}")
-m1 = (r1+l1)/2
-m2 = (r2+l2)/2
+def crop_rotate(image, contour_from_middle = True, show_stages = True):
+	
+	## Stage 1: blur
+	
+	blurred = cv2.GaussianBlur(image,(101,101),0)
 
-angle = 180*np.arctan2(m2-m1, sobelx.shape[0])/pi
+	if show_stages:
+		fig,axs = plt.subplots(2,2)
+		axs[0,0].imshow(blurred, cmap="gray")
+		plt.show()
+		
+	# compute the gradient
+	sobelx = cv2.Sobel(blurred,cv2.CV_64F,1,0,ksize=1)
+	sobely = cv2.Sobel(blurred,cv2.CV_64F,0,1,ksize=1)
+	
+	if show_stages:
+		axs[0,1].imshow(sobelx, cmap="gray")
+		#axs[0,1].imshow(sobely, cmap="gray")
+	
+	
+	# compute contours
+	x_mid = image.shape[1] / 2
+	x_buffer = 10
+	
+	if contour_from_middle:
+		xl = x_mid - x_buffer
+		xr = x_mid + x_buffer
+	else:
+		xl = x_buffer
+		xr = image.shape[1] - 10
+		
+	dl = ((not contour_from_middle) * 2) - 1
+	dr = (contour_from_middle * 2) - 1
+	
+	(l1, l2) = venergy(sobelx, xl,xl, dl, max_iter = 6000, DEBUG=True)
+	(r1, r2) = venergy(sobelx, xr,xr, dr, DEBUG=True, alpha = 0.5)
+	m1 = (r1+l1)/2
+	m2 = (r2+l2)/2
+	
+	angle = 180*np.arctan2(m2-m1, sobelx.shape[0])/pi
 
-def rotateback(m1, m2):
-    Cx = imgbw.shape[1]//2; Cy =imgbw.shape[0]//2;
+	if show_stages:
+		axs[1,0].imshow(image, cmap="gray")
+		axs[1,0].plot([r1,r2], [0, image.shape[0]],color="red")
+		axs[1,0].plot([l1,l2], [0, image.shape[0]],color="red")
+		axs[1,0].plot([m1, m2], [0, image.shape[0]], color = "blue", alpha = .5)
+		plt.show()
 
-    c = np.array([Cx,Cy])
-    p1 = np.array([m1, 0])
-    p2 = np.array([m2, imgbw.shape[0]])
+	
+	# crop
+	def rotateback(m1, m2):
+	    Cx = image.shape[1]//2; Cy =image.shape[0]//2;
+	
+	    c = np.array([Cx,Cy])
+	    p1 = np.array([m1, 0])
+	    p2 = np.array([m2, image.shape[0]])
+	
+	    d = np.linalg.norm(np.cross(p2-p1, p1-c))/np.linalg.norm(p2-p1)
+	    orientation = np.sign(np.cross(p1-c, p2-c))
+	    return d*orientation + Cx
+   
+	Cx = image.shape[1]//2; Cy =image.shape[0]//2;
+	w = image.shape[1]; h = image.shape[0];
+	M = cv2.getRotationMatrix2D((Cx, Cy), -angle, 1.0)
+	rotated = cv2.warpAffine(image, M, (img1.shape[1], img1.shape[0]))
+	cropl = rotateback(l1, l2)
+	cropr = rotateback(r1, r2)
 
-    d = np.linalg.norm(np.cross(p2-p1, p1-c))/np.linalg.norm(p2-p1)
-    orientation = np.sign(np.cross(p1-c, p2-c))
-    return d*orientation + Cx
+	cropped = rotated[:,int(cropl):int(cropr)]
+	
+	if show_stages:
+		axs[1,1].imshow(cropped, cmap="gray")
+		plt.show()
+
+	return cropped
 ```
 
-```{python}
-plt.imshow(imgbw, cmap="gray")
-plt.plot([r1,r2], [0, imgbw.shape[0]],color="red")
-plt.plot([l1,l2], [0, imgbw.shape[0]],color="red")
-plt.plot([m1, m2], [0, imgbw.shape[0]], color = "blue", alpha = .5)
-```
+
+
 
 ```{python}
-Cx = imgbw.shape[1]//2; Cy =imgbw.shape[0]//2;
-w = imgbw.shape[1]; h = imgbw.shape[0];
-M = cv2.getRotationMatrix2D((Cx, Cy), -angle, 1.0)
-rotated = cv2.warpAffine(imgbw, M, (img1.shape[1], img1.shape[0]))
-cropl = rotateback(l1, l2)
-cropr = rotateback(r1, r2)
-```
+cropped = crop_rotate(imgbw, contour_from_middle = False)
+plt.imshow(cropped, cmap="gray")
 
-```{python}
-cropped = rotated[:,int(cropl):int(cropr)]
-plt.imshow(cropped, cmap="gray");
 ```
 
 ```{python}
