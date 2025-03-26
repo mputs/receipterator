@@ -107,8 +107,16 @@ def venergy(gradx, x1, x2, direction, alpha=.5, beta=1, max_iter = 10000, DEBUG=
 ```
 
 ```{python}
-def crop_rotate(image, contour_from_middle = True, show_stages = True):
-	
+def crop_rotate(image, contour_from_middle = True, x_offset = 10, alpha = 0.5, max_iter = 6000, show_stages = True):
+    #parameters:
+    # image (bw image needed)
+    # contour_from_middle: should the vertical contours be searched from the middle of the image to the left and right sides? Or the other way round?
+    # x_offset: the number of pixels from the starting point of contour search?
+    # alpha: passed on to venergy
+    # max_iter: passed on to venergy
+    # show_stages: should the intermediate stages be plotted? blurred, gradient lines, and cropped image?
+    
+
 	## Stage 1: blur
 	
 	blurred = cv2.GaussianBlur(image,(101,101),0)
@@ -129,20 +137,20 @@ def crop_rotate(image, contour_from_middle = True, show_stages = True):
 	
 	# compute contours
 	x_mid = image.shape[1] / 2
-	x_buffer = 10
+	x_offset = 10
 	
 	if contour_from_middle:
-		xl = x_mid - x_buffer
-		xr = x_mid + x_buffer
+		xl = x_mid - x_offset
+		xr = x_mid + x_offset
 	else:
-		xl = x_buffer
+		xl = x_offset
 		xr = image.shape[1] - 10
 		
 	dl = ((not contour_from_middle) * 2) - 1
 	dr = (contour_from_middle * 2) - 1
 	
-	(l1, l2) = venergy(sobelx, xl,xl, dl, max_iter = 6000, DEBUG=True)
-	(r1, r2) = venergy(sobelx, xr,xr, dr, DEBUG=True, alpha = 0.5)
+	(l1, l2) = venergy(sobelx, xl,xl, dl, max_iter = max_iter, DEBUG=True, alpha = alpha)
+	(r1, r2) = venergy(sobelx, xr,xr, dr, max_iter = max_iter, DEBUG=True, alpha = alpha)
 	m1 = (r1+l1)/2
 	m2 = (r2+l2)/2
 	
