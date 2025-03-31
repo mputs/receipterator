@@ -1,6 +1,7 @@
 library(tidyverse)
-
 dat6 = read_tsv("data_adj6.tsv", quote = "")
+
+dat6 = read_tsv("data_adj6_cropped.tsv", quote = "")
 
 
 # Regular expression to match numbers with optional minus sign,
@@ -276,6 +277,13 @@ D = D_prod |>
 	left_join(D_discount, by = "line_num")
 
 
+## sum
+D2 = D |>
+	mutate(discount_num = as.numeric(discount),
+		   discount_num = ifelse(is.na(discount_num), 0 , discount_num),
+		   price_num = as.numeric(price))
+
+sum(D2$price_num - D2$discount_num)
 
 ###############################################
 # editing

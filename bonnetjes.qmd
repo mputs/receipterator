@@ -375,6 +375,13 @@ with open("data_adj6.tsv", "w") as f:
 ```
 
 ```{python}
+data_adj6c = pytesseract.image_to_data(cropped, config='--psm 6')
+
+with open("data_adj6_cropped.tsv", "w") as f:
+	f.write(data_adj6c)
+```
+
+```{python}
 data_adj = pytesseract.image_to_data(adj)
 
 with open("data_adj.tsv", "w") as f:
